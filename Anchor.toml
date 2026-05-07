@@ -5,11 +5,24 @@ package_manager = "npm"
 resolution = true
 skip-lint = false
 
+# ── Local development (LiteSVM tests, no validator required) ──────────────────
 [programs.localnet]
 flash_pool = "7fMKkQ9dbkMf1FGTv4vZ1m8bgBX1PKehVS6gkDn84Trv"
 
+# ── Devnet deployment ─────────────────────────────────────────────────────────
+# Replace the program ID below with the real one after running: anchor deploy
+[programs.devnet]
+flash_pool = "7fMKkQ9dbkMf1FGTv4vZ1m8bgBX1PKehVS6gkDn84Trv"
+
+# ── Provider ──────────────────────────────────────────────────────────────────
+# Switch between localnet and devnet by changing `cluster` here, or by passing
+# `--provider.cluster devnet` as a CLI flag.
+#
+# For Phase 3 (MagicBlock ER), point to the Magic Router RPC so transactions
+# targeting delegated accounts are automatically routed to the Ephemeral Rollup:
+#   cluster = "https://devnet-rpc.magicblock.app"
 [provider]
-cluster = "localnet"
+cluster = "Devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

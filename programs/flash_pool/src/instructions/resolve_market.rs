@@ -42,18 +42,18 @@ pub fn resolve_market_handler(ctx: Context<ResolveMarket>, oracle_price: u64) ->
         let mut accumulated: u32 = 0;
         let mut median_error: u64 = 0;
 
-        for distance in 0..HISTOGRAM_BUCKETS {
-            // Accumulate the bucket at `distance` to the left
+            // We walk outward (distance 0, 1, 2...) until we accumulate 50% of the votes.
+            // Accumulate the bucket at `distance` to the left.
             if distance > 0 {
                 if let Some(left_idx) = winning_bucket_index.checked_sub(distance) {
                     accumulated = accumulated.saturating_add(flash_pool.histogram_buckets[left_idx]);
                 }
             } else {
-                // distance == 0: just the winning bucket itself
+                // distance == 0: just the winning bucket itself.
                 accumulated = accumulated.saturating_add(flash_pool.histogram_buckets[winning_bucket_index]);
             }
 
-            // Accumulate the bucket at `distance` to the right (skip 0, already counted above)
+            // Accumulate the bucket at `distance` to the right (skip 0, already counted above).
             if distance > 0 {
                 let right_idx = winning_bucket_index + distance;
                 if right_idx < HISTOGRAM_BUCKETS {
@@ -61,6 +61,7 @@ pub fn resolve_market_handler(ctx: Context<ResolveMarket>, oracle_price: u64) ->
                 }
             }
 
+            // The 'median_error' is the distance required to reach the target_count.
             median_error = distance as u64;
 
             if accumulated >= target_count {

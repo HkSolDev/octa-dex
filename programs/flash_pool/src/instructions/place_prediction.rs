@@ -45,27 +45,19 @@ pub struct PlacePrediction<'info> {
 pub fn place_prediction_handler(ctx: Context<PlacePrediction>, prediction_value: u64) -> Result<()> {
     let flash_pool = &mut ctx.accounts.flash_pool;
 
-    // 1. Map user's price guess to a histogram bucket index
-    require!(prediction_value >= flash_pool.base_price, ErrorCode::InvalidPrediction);
-    let diff = prediction_value - flash_pool.base_price;
-    let bucket_index = (diff / flash_pool.precision_step) as usize;
-    require!(bucket_index < HISTOGRAM_BUCKETS, ErrorCode::InvalidPrediction);
-
-    // 2. Transfer 1 USDC entry fee from user → vault using transfer_checked
-    let decimals = ctx.accounts.mint.decimals;
-    let cpi_accounts = TransferChecked {
-        from: ctx.accounts.user_token_account.to_account_info(),
-        mint: ctx.accounts.mint.to_account_info(),
-        to: ctx.accounts.vault.to_account_info(),
-        authority: ctx.accounts.user.to_account_info(),
+    // 1. Calculate which bucket the prediction falls into.
+    // If the prediction is below the base price, it goes to the first bucket (0).
+    // Otherwise, we calculate the offset from base_price and divide by precision_step.
+    let bucket_index = if prediction_value < flash_pool.base_price {
+        0usize
+    } else {
+        let diff = prediction_value - flash_pool.base_price;
+        let idx = (diff / flash_pool.precision_step) as usize;
+        // Cap at the last bucket to prevent out-of-bounds access.
+        if idx >= HISTOGRAM_BUCKETS { HISTOGRAM_BUCKETS - 1 } else { idx }
     };
-    let cpi_ctx = CpiContext::new(
-        ctx.accounts.token_program.key(),
-        cpi_accounts,
-    );
-    transfer_checked(cpi_ctx, flash_pool.entry_fee, decimals)?;
 
-    // 3. Update global pool state
+    // 2. Update global pool state.
     flash_pool.total_participants = flash_pool
         .total_participants
         .checked_add(1)
@@ -84,6 +76,22 @@ pub fn place_prediction_handler(ctx: Context<PlacePrediction>, prediction_value:
     user_prediction.pool = flash_pool.key();
     user_prediction.predicted_bucket_index = bucket_index as u8;
     user_prediction.bump = ctx.bumps.user_prediction;
+
+    // 3. Collect entry fee via Token-2022 CPI.
+    // We use transfer_checked to ensure the decimals and mint are correct.
+    transfer_checked(
+        CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.user_token_account.to_account_info(),
+                to: ctx.accounts.vault.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
+            },
+        ),
+        flash_pool.entry_fee,
+        ctx.accounts.mint.decimals,
+    )?;
 
     msg!("Prediction placed in bucket {} for pool {}", bucket_index, flash_pool.key());
     Ok(())

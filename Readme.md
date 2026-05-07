@@ -112,4 +112,3 @@ The current codebase is "Phase 2 ready."
 
 ---
 
-### Developed with ⚡ by Antigravity

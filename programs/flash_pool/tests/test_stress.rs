@@ -178,8 +178,9 @@ fn test_stress_10k_predictions() {
             &program_id,
         );
 
-        // Spread predictions evenly across all 100 buckets
-        // bucket i%100 → prediction_value = base + bucket * step
+        // 4. Place Prediction
+        // We spread the predictions evenly across all 100 buckets to test the math.
+        // Each bucket 'i % 100' gets an equal share of the 10,000 users.
         let bucket: u64 = (i % 100) as u64;
         let prediction_value = BASE_PRICE + (bucket * PRECISION_STEP);
 
@@ -198,9 +199,11 @@ fn test_stress_10k_predictions() {
             }.to_account_metas(None),
         );
 
+        // Sign with the unique user keypair for this transaction.
         let msg = Message::new_with_blockhash(&[ix], Some(&user_pubkey), &svm.latest_blockhash());
         let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg), &[&user]).unwrap();
 
+        // Send directly to the in-memory SVM. No networking overhead.
         svm.send_transaction(tx)
             .unwrap_or_else(|e| panic!("tx {} (bucket {}) failed: {:?}", i, bucket, e));
     }

@@ -662,7 +662,11 @@ To fully understand how FlashPool operates at blazing speeds without compromisin
 ### 1. The Setup (Are we using real money?)
 - **The Money:** In the current Devnet environment, **no real money is used**. We are using a mock Token-2022 USDC mint (`7U1kuS...`) deployed on Solana Devnet. You "pay" 1 mock USDC to place a prediction.
 - **The Vault:** All entry fees are held securely in a **Token-2022 Vault PDA** (Program Derived Address). A PDA is an account controlled purely by the smart contract—no human has the private key to steal the funds.
+  - [View Vault PDA on Devnet Explorer](https://explorer.solana.com/address/71bCA76zMKQyJSs4uhMCGmVMVgYMdWopjbMVGmgFDTw?cluster=devnet)
 - **The Pool:** We create a `FlashPool` PDA that acts as the scoreboard. It holds the 100-bucket array representing the histogram of predictions.
+  - [View FlashPool PDA on Devnet Explorer](https://explorer.solana.com/address/58NssAJJaukhaBKfmSKP7J8QKEPXQKQF6K76EZchNoEr?cluster=devnet)
+- **The Program:** The actual Anchor smart contract that orchestrates this entire process.
+  - [View Program on Devnet Explorer](https://explorer.solana.com/address/7fMKkQ9dbkMf1FGTv4vZ1m8bgBX1PKehVS6gkDn84Trv?cluster=devnet)
 
 ### 2. MagicBlock ER Delegation (The "Need for Speed")
 Solana Layer 1 (L1) has a ~400ms block time and charges gas fees. To achieve high-frequency trading speeds (50ms) for our 1,000 bots, we use **MagicBlock Ephemeral Rollups (ER)**.
@@ -734,7 +738,7 @@ Solana Layer 1 (L1) has a ~400ms block time and charges gas fees. To achieve hig
 
 ## 👤 Author
 
-Built by **HkSolDev** with ⚡ Antigravity AI
+Built by **HkSolDev** I
 
 ---
 

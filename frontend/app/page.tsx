@@ -12,7 +12,6 @@ import {
   createSolanaRpc
 } from '@solana/kit';
 import { useWallets, useConnect, useDisconnect } from '@wallet-standard/react';
-import { useWalletAccountTransactionSendingSigner } from '@solana/react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine, BarChart, Bar, Cell,
@@ -60,7 +59,7 @@ function gaussianRandom(mean: number, sigma: number): number {
 }
 
 // ─── Phase 4: The Human Element (Wallet Standard) ─────────────────────────────
-export function ConnectWalletButton({ onConnect }: { onConnect?: (walletInfo: { address: string, name: string, account: any }) => void }) {
+export function ConnectWalletButton({ onConnect }: { onConnect?: (walletInfo: { address: string, name: string, account: any, wallet: any }) => void }) {
     const [isMounted, setIsMounted] = useState(false);
     const wallets = useWallets();
 
@@ -68,7 +67,7 @@ export function ConnectWalletButton({ onConnect }: { onConnect?: (walletInfo: { 
     useEffect(() => {
         for (const w of wallets) {
             if (w.accounts && w.accounts.length > 0 && onConnect) {
-                onConnect({ address: w.accounts[0].address, name: w.name, account: w.accounts[0] });
+                onConnect({ address: w.accounts[0].address, name: w.name, account: w.accounts[0], wallet: w });
             }
         }
     }, [wallets, onConnect]);
@@ -107,7 +106,7 @@ export function ConnectWalletButton({ onConnect }: { onConnect?: (walletInfo: { 
 }
 
 // Wallet with standard:connect — uses useConnect hook (returns a TUPLE)
-function WalletItem({ wallet, onConnect }: { wallet: any, onConnect?: (walletInfo: { address: string, name: string, account: any }) => void }) {
+function WalletItem({ wallet, onConnect }: { wallet: any, onConnect?: (walletInfo: { address: string, name: string, account: any, wallet: any }) => void }) {
     const [isConnecting, connect] = useConnect(wallet);
 
     const handleConnect = async () => {
@@ -116,7 +115,7 @@ function WalletItem({ wallet, onConnect }: { wallet: any, onConnect?: (walletInf
             const connectedAccount = wallet.accounts[0];
             if (connectedAccount) {
                 console.log(`✅ Connected to ${wallet.name}:`, connectedAccount.address);
-                if (onConnect) onConnect({ address: connectedAccount.address, name: wallet.name, account: connectedAccount });
+                if (onConnect) onConnect({ address: connectedAccount.address, name: wallet.name, account: connectedAccount, wallet });
             }
         } catch (e) {
             console.error(`Failed to connect to ${wallet.name}:`, e);
@@ -132,7 +131,7 @@ function WalletItem({ wallet, onConnect }: { wallet: any, onConnect?: (walletInf
 }
 
 // Wallet without standard:connect — direct window API fallback
-function LegacyWalletItem({ wallet, onConnect }: { wallet: any, onConnect?: (walletInfo: { address: string, name: string, account: any }) => void }) {
+function LegacyWalletItem({ wallet, onConnect }: { wallet: any, onConnect?: (walletInfo: { address: string, name: string, account: any, wallet: any }) => void }) {
     const [connecting, setConnecting] = useState(false);
 
     const handleConnect = async () => {
@@ -152,7 +151,14 @@ function LegacyWalletItem({ wallet, onConnect }: { wallet: any, onConnect?: (wal
             }
             
             console.log(`✅ Connected to ${wallet.name} (legacy)`);
-            if (connectedAddress && onConnect) onConnect({ address: connectedAddress, name: wallet.name, account: wallet.accounts?.[0] || { address: connectedAddress } });
+            if (connectedAddress && onConnect) {
+                onConnect({ 
+                    address: connectedAddress, 
+                    name: wallet.name, 
+                    account: wallet.accounts?.[0] || { address: connectedAddress },
+                    wallet 
+                });
+            }
         } catch (e) {
             console.error(`Failed to connect to ${wallet.name}:`, e);
         } finally {
@@ -245,10 +251,7 @@ export default function FlashPoolPage() {
   const [botsPlaced, setBotsPlaced]     = useState<number>(0);
   const [oracleConnected, setOracleConnected] = useState<boolean>(false);
   const [botCount, setBotCount]         = useState<number>(1000); // 1K–1M slider
-  const [activeWallet, setActiveWallet] = useState<{ address: string, name: string, account: any } | null>(null);
-  
-  // Real transaction signer for the connected wallet!
-  const transactionSigner = useWalletAccountTransactionSendingSigner(activeWallet?.account || null);
+  const [activeWallet, setActiveWallet] = useState<{ address: string, name: string, account: any, wallet: any } | null>(null);
 
   const timerRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const botRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -333,7 +336,12 @@ export default function FlashPoolPage() {
         console.log(`Building real transaction for ${activeWallet.name} to sign...`);
         // TODO: Build actual `@solana/kit` transaction message here
         // const msg = createTransactionMessage({ version: 0 });
-        // const signedTx = await transactionSigner.signAndSendTransaction(msg);
+        
+        // Use standard feature directly
+        // const signAndSendFeature = activeWallet.wallet.features['solana:signAndSendTransaction'];
+        // if (signAndSendFeature) {
+        //     await signAndSendFeature.signAndSendTransaction({ account: activeWallet.account, transaction: msg });
+        // }
         
         console.log("Simulating real transaction signing popup for now.");
         await new Promise(resolve => setTimeout(resolve, 500)); // simulate wallet popup delay
@@ -348,7 +356,7 @@ export default function FlashPoolPage() {
     } catch (e) {
         console.error("User cancelled or transaction failed:", e);
     }
-  }, [phase, userBet, predictionPrice, userBalance, basePrice, activeWallet, transactionSigner]);
+  }, [phase, userBet, predictionPrice, userBalance, basePrice, activeWallet]);
 
   // ─── Start Bot Flood ──────────────────────────────────────────────────────
   // Batch size auto-scales so ALL bots finish in exactly 30s regardless of count.

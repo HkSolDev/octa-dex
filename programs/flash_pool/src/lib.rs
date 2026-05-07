@@ -25,9 +25,9 @@ pub mod flash_pool {
         place_prediction::place_prediction_handler(ctx, prediction_value)
     }
 
-    /// 3. Resolves the market round based on an oracle price and calculates the median error.
-    pub fn resolve_market(ctx: Context<ResolveMarket>, oracle_price: u64) -> Result<()> {
-        resolve_market::resolve_market_handler(ctx, oracle_price)
+    /// 3. Resolves the market by reading the real-time price from the Pyth oracle account.
+    pub fn resolve_market(ctx: Context<ResolveMarket>) -> Result<()> {
+        resolve_market::resolve_market_handler(ctx)
     }
 
     /// 4. Payouts winners and reclaims rent from prediction PDAs.

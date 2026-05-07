@@ -7,3 +7,5 @@ test-ledger
 .yarn
 .surfpool
 OVERVIEW.md
+frontend/.next
+frontend/node_modules

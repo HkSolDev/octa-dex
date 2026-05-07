@@ -8,6 +8,7 @@ use {
         AccountDeserialize,
     },
     litesvm::LiteSVM,
+    solana_account::Account as SolanaAccount,
     solana_message::{Message, VersionedMessage},
     solana_signer::Signer,
     solana_keypair::Keypair,
@@ -75,16 +76,81 @@ fn test_full_lifecycle_flow() {
     let user2_up = place_pred(&mut svm, &user2, flash_pool_pda, vault_pda, mint_pubkey, user2_ata, 95_170);
 
     // 5. Resolve Market
-    // Outcome: $951.60 -> Bucket 16
-    // Median error loop:
-    // - i=15: count=1, total=1, target=1. Loop breaks.
-    // - winning_bucket = 16.
-    // - median_error = |15 - 16| = 1.
-    // Winners: Buckets 15, 16, 17. Both users win!
-    let resolve_ix = Instruction::new_with_bytes(program_id, &flash_pool::instruction::ResolveMarket { oracle_price: 95_160 }.data(), flash_pool::accounts::ResolveMarket { flash_pool: flash_pool_pda, payer: payer.pubkey() }.to_account_metas(None));
+    // We inject a mock PriceUpdateV2 account into LiteSVM memory.
+    // The byte layout matches the Pyth SDK's PriceUpdateV2 struct exactly.
+    // See resolve_market.rs for the full offset map.
+    //
+    // Outcome price: $951.60 → base_price=95_000, precision_step=10
+    // In Pyth format: raw_price = 9516, exponent = -2
+    //   oracle_price = 9516 / 10^(2-2) = 9516 ... that's wrong for 95160.
+    // Let's use:  raw_price = 9_516_000_000, exponent = -8
+    //   scale = 10^(8-2) = 10^6 = 1_000_000
+    //   oracle_price = 9_516_000_000 / 1_000_000 = 9_516  -- hmm still wrong
+    //
+    // Correction: base_price=95_000 means $950.00 with 2 decimal places.
+    //   We need oracle_price = 95_160 (= $951.60 in our 2-decimal format).
+    //   Pyth raw_price in units 10^-8:  95_160 * 10^6 = 95_160_000_000 with exp=-8
+    //   scale = 10^(8-2) = 1_000_000
+    //   oracle_price = 95_160_000_000 / 1_000_000 = 95_160 ✓
+    let mut oracle_data = vec![0u8; 160];
+
+    // [0..8]   Discriminator (we own the account, owner check is what matters)
+    oracle_data[0..8].copy_from_slice(&[0u8; 8]);
+
+    // [8..40]  write_authority: any Pubkey
+    oracle_data[8..40].copy_from_slice(&[1u8; 32]);
+
+    // [40..42] verification_level: Full = variant tag 1, no extra byte
+    oracle_data[40] = 1; // VerificationLevel::Full
+    oracle_data[41] = 0; // (second byte of 2-byte fixed encoding)
+
+    // [42..74] feed_id: SOL/USD feed id
+    let sol_usd_feed_id: [u8; 32] = [
+        0xef, 0x0d, 0x8b, 0x6f, 0xda, 0x2c, 0xeb, 0xa4,
+        0x1d, 0xa1, 0x5d, 0x40, 0x95, 0xd1, 0xda, 0x39,
+        0x2a, 0x0d, 0x2f, 0x8e, 0xd0, 0xc6, 0xc7, 0xbc,
+        0x0f, 0x4c, 0xfa, 0xc8, 0xc2, 0x80, 0xb5, 0x6d,
+    ];
+    oracle_data[42..74].copy_from_slice(&sol_usd_feed_id);
+
+    // [74..82] price: i64 = 95_160_000_000 (raw Pyth units)
+    let raw_price: i64 = 95_160_000_000;
+    oracle_data[74..82].copy_from_slice(&raw_price.to_le_bytes());
+
+    // [90..94] exponent: i32 = -8
+    let exponent: i32 = -8;
+    oracle_data[90..94].copy_from_slice(&exponent.to_le_bytes());
+
+    // [94..102] publish_time: set to current LiteSVM clock (always fresh)
+    let publish_time: i64 = 0; // LiteSVM clock is at unix timestamp 0 by default
+    oracle_data[94..102].copy_from_slice(&publish_time.to_le_bytes());
+
+    let price_update_key = Pubkey::new_unique();
+    let pyth_receiver_id: Pubkey = "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ".parse().unwrap();
+    let rent_lamports = svm.minimum_balance_for_rent_exemption(oracle_data.len());
+    svm.set_account(
+        price_update_key,
+        SolanaAccount {
+            lamports: rent_lamports,
+            data: oracle_data,
+            owner: pyth_receiver_id,
+            executable: false,
+            rent_epoch: 0,
+        },
+    ).unwrap();
+
+    let resolve_ix = Instruction::new_with_bytes(
+        program_id,
+        &flash_pool::instruction::ResolveMarket {}.data(),
+        flash_pool::accounts::ResolveMarket {
+            flash_pool: flash_pool_pda,
+            price_update: price_update_key,
+            payer: payer.pubkey(),
+        }.to_account_metas(None),
+    );
     svm.send_transaction(VersionedTransaction::try_new(VersionedMessage::Legacy(Message::new_with_blockhash(&[resolve_ix], Some(&payer.pubkey()), &svm.latest_blockhash())), &[&payer]).unwrap()).unwrap();
 
-    // Verify median_error
+    // Verify: outcome should be 95_160 ($951.60 in 2-decimal format)
     let pool_acc = svm.get_account(&flash_pool_pda).unwrap();
     let pool_state = FlashPool::try_deserialize(&mut &pool_acc.data[..]).unwrap();
     assert_eq!(pool_state.median_error, 1);

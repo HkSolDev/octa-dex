@@ -12,4 +12,10 @@ pub enum ErrorCode {
     Unauthorized,
     #[msg("Prediction is outside the valid range")]
     InvalidPrediction,
+    #[msg("The oracle account is not owned by the Pyth Receiver program")]
+    InvalidOracleOwner,
+    #[msg("The oracle feed_id does not match the expected SOL/USD feed")]
+    MismatchedFeedId,
+    #[msg("The oracle account data is malformed or too short")]
+    InvalidOracleData,
 }
